@@ -1,1 +1,1 @@
-web: node dist/index.js
+web: bash start-server.sh
