@@ -1,1 +1,1 @@
-web: node railway-env-setup.js
+web: node dist/index.js
