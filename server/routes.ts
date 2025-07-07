@@ -105,12 +105,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const itemData = insertInventoryItemSchema.parse(req.body);
       const item = await storage.createInventoryItem(itemData);
       res.status(201).json(item);
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
+      
       console.error("Error creating inventory item:", error);
-      res.status(500).json({ message: "Failed to create inventory item" });
+      
+      // Handle specific database errors
+      if (error.code === '23505') {
+        if (error.constraint === 'inventory_items_code_barre_unique') {
+          return res.status(400).json({ message: "Ce code-barres existe déjà" });
+        }
+        if (error.constraint === 'inventory_items_num_inventaire_unique') {
+          return res.status(400).json({ message: "Ce numéro d'inventaire existe déjà" });
+        }
+        return res.status(400).json({ message: "Cet article existe déjà" });
+      }
+      
+      res.status(500).json({ message: "Erreur lors de la création de l'article" });
     }
   });
 

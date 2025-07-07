@@ -80,7 +80,11 @@ export function AddItemModal({ open, onClose, onSuccess, filterOptions, editingI
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error(`Failed to ${isEditing ? 'update' : 'add'} item`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.message || `Failed to ${isEditing ? 'update' : 'add'} item`;
+        throw new Error(errorMessage);
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -312,15 +316,17 @@ export function AddItemModal({ open, onClose, onSuccess, filterOptions, editingI
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {filterOptions?.categories.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="Ordinateurs">Ordinateurs</SelectItem>
-                        <SelectItem value="Mobilier">Mobilier</SelectItem>
-                        <SelectItem value="Équipement">Équipement</SelectItem>
-                        <SelectItem value="Fournitures">Fournitures</SelectItem>
+                        {(() => {
+                          const existingCategories = filterOptions?.categories || [];
+                          const defaultCategories = ["Ordinateurs", "Mobilier", "Équipement", "Fournitures"];
+                          const allCategories = [...new Set([...existingCategories, ...defaultCategories])];
+                          
+                          return allCategories.map((cat) => (
+                            <SelectItem key={cat} value={cat}>
+                              {cat}
+                            </SelectItem>
+                          ));
+                        })()}
                       </SelectContent>
                     </Select>
                     <FormMessage />

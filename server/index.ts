@@ -1,9 +1,12 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { testDatabaseConnection } from "./db-test";
+import { runMigrations } from "./migrate";
+import { importToRailwayDatabase } from "./railway-import";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { neon } from '@neondatabase/serverless';
 
 // ES module compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -120,6 +123,35 @@ app.use((req, res, next) => {
       log('Continuing startup despite database connection issue (will retry on first request)');
     } else {
       log('Database connection successful');
+      
+      // Run migrations to ensure all tables exist
+      log('Running database migrations...');
+      try {
+        await runMigrations();
+        log('Database migrations completed');
+        
+        // Check if we need to import data
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(process.env.DATABASE_URL);
+        const itemCount = await sql`SELECT COUNT(*) as count FROM inventory_items`;
+        
+        if (itemCount[0].count === 0) {
+          log('Empty database detected - checking for import data...');
+          const exportPath = path.join(process.cwd(), 'exports', 'inventory-export-2025-07-06.json');
+          if (fs.existsSync(exportPath)) {
+            log('Found export file - importing 1,364 inventory items...');
+            await importToRailwayDatabase();
+            log('Data import completed successfully');
+          } else {
+            log('No export file found - starting with empty database');
+          }
+        } else {
+          log(`Database already contains ${itemCount[0].count} items`);
+        }
+        
+      } catch (error: any) {
+        log(`Migration warning: ${error.message} (tables may already exist)`);
+      }
     }
     
     const server = await registerRoutes(app);

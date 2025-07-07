@@ -196,15 +196,52 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInventoryItem(item: InsertInventoryItem): Promise<InventoryItem> {
+    // Auto-generate unique inventory number if not provided or empty
+    let finalItem = { ...item };
+    
+    if (!finalItem.num_inventaire || finalItem.num_inventaire.trim() === '') {
+      finalItem.num_inventaire = await this.generateUniqueInventoryNumber();
+    } else {
+      // Check if the provided inventory number already exists
+      const existing = await db.select().from(inventoryItems).where(eq(inventoryItems.num_inventaire, finalItem.num_inventaire));
+      if (existing.length > 0) {
+        // Auto-generate a new unique number
+        finalItem.num_inventaire = await this.generateUniqueInventoryNumber();
+      }
+    }
+    
     const [createdItem] = await db
       .insert(inventoryItems)
       .values({
-        ...item,
+        ...finalItem,
         date_ajouter: new Date(),
         date_modification: new Date(),
       })
       .returning();
     return createdItem;
+  }
+
+  private async generateUniqueInventoryNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const basePrefix = `INV-${year}-`;
+    
+    // Get the highest existing number for this year
+    const existingItems = await db
+      .select({ num_inventaire: inventoryItems.num_inventaire })
+      .from(inventoryItems)
+      .where(like(inventoryItems.num_inventaire, `${basePrefix}%`));
+    
+    const existingNumbers = existingItems
+      .map(item => {
+        const match = item.num_inventaire.match(new RegExp(`${basePrefix}(\\d+)`));
+        return match ? parseInt(match[1]) : 0;
+      })
+      .filter(num => !isNaN(num));
+    
+    const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    const nextNumber = maxNumber + 1;
+    
+    return `${basePrefix}${nextNumber.toString().padStart(3, '0')}`;
   }
 
   async updateInventoryItem(id: number, item: UpdateInventoryItem): Promise<InventoryItem | undefined> {
